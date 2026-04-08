@@ -8,6 +8,7 @@
 const { addonBuilder } = require("stremio-addon-sdk");
 const { searchSukebeiAV, extractResolution } = require("./lib/sukebei");
 const { checkRD, checkTorbox, getActiveRD, getActiveTorbox } = require("./lib/debrid");
+const { fetchMetadata } = require("./lib/metadata");
 
 let BASE_URL = (process.env.BASE_URL || "http://127.0.0.1:7474").replace(/\/+$/, "");
 
@@ -142,16 +143,25 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
     const encodedId = Buffer.from(query).toString("base64url");
 
     const firstTitle = torrents[0].title.replace(/\[.*?\]/g, "").replace(/\(.*?\)/g, "").trim();
-    const displayName = avId ? `${avId} — ${firstTitle}`.substring(0, 80) : firstTitle.substring(0, 80);
+    let displayName = avId ? `${avId} — ${firstTitle}`.substring(0, 80) : firstTitle.substring(0, 80);
+    let poster = generatePoster(label);
+    let description = `${torrents.length} torrent(s) on sukebei.nyaa.si\n\n${torrents[0].title}`;
+
+    const extMeta = await fetchMetadata(query);
+    if (extMeta) {
+        if (extMeta.title) displayName = `${extMeta.id} — ${extMeta.title}`.substring(0, 80);
+        if (extMeta.poster) poster = extMeta.poster;
+        if (extMeta.description) description = `${description}\n\n---\n\n${extMeta.description}`;
+    }
 
     return {
         metas: [{
             id: "av:" + encodedId,
             type: "movie",
             name: displayName,
-            poster: generatePoster(label),
+            poster: poster,
             posterShape: "poster",
-            description: `${torrents.length} torrent(s) on sukebei.nyaa.si\n\n${torrents[0].title}`,
+            description: description,
             genres: ["Adult"],
         }],
         cacheMaxAge: 3600,
@@ -173,16 +183,25 @@ builder.defineMetaHandler(async ({ type, id }) => {
     const firstTitle = torrents.length
         ? torrents[0].title.replace(/\[.*?\]/g, "").replace(/\(.*?\)/g, "").trim()
         : query;
-    const displayName = avId ? `${avId} — ${firstTitle}`.substring(0, 80) : firstTitle.substring(0, 80);
+    let displayName = avId ? `${avId} — ${firstTitle}`.substring(0, 80) : firstTitle.substring(0, 80);
+    let poster = generatePoster(label);
+    let description = `${torrents.length} torrent(s) found on sukebei.nyaa.si.\nSearch: ${query}\n\n${firstTitle}`;
+    
+    const extMeta = await fetchMetadata(query);
+    if (extMeta) {
+        if (extMeta.title) displayName = `${extMeta.id} — ${extMeta.title}`.substring(0, 80);
+        if (extMeta.poster) poster = extMeta.poster;
+        if (extMeta.description) description = `${description}\n\n---\n\n${extMeta.description}`;
+    }
 
     return {
         meta: {
             id,
             type: "movie",
             name: displayName,
-            poster: generatePoster(label),
+            poster: poster,
             posterShape: "poster",
-            description: `${torrents.length} torrent(s) found on sukebei.nyaa.si.\nSearch: ${query}\n\n${firstTitle}`,
+            description: description,
             genres: ["Adult", "AV"],
         },
         cacheMaxAge: 3600,
