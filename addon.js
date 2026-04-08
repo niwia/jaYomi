@@ -17,10 +17,32 @@ let BASE_URL = (process.env.BASE_URL || "http://127.0.0.1:7474").replace(/\/+$/,
 function parseConfig(config) {
     let parsed = {};
     try {
+        // Log raw config keys so we can see what the SDK is passing
+        console.log("[Config] Raw keys:", config ? Object.keys(config) : "null");
+
         if (config && config.AV) {
             let b64 = config.AV.replace(/-/g, "+").replace(/_/g, "/");
             while (b64.length % 4) b64 += "=";
             parsed = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+            console.log("[Config] Decoded keys:", Object.keys(parsed));
+        } else if (config && Object.keys(config).length > 0) {
+            // SDK might pass config differently — try the first value as base64
+            const firstKey = Object.keys(config)[0];
+            const firstVal = config[firstKey];
+            console.log("[Config] Trying first key:", firstKey, "val[:20]:", String(firstVal).substring(0, 20));
+            try {
+                let b64 = String(firstVal).replace(/-/g, "+").replace(/_/g, "/");
+                while (b64.length % 4) b64 += "=";
+                const attempt = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+                if (attempt && (attempt.rdKey || attempt.tbKey)) {
+                    parsed = attempt;
+                    console.log("[Config] Fallback decode worked! Keys:", Object.keys(parsed));
+                } else {
+                    parsed = config;
+                }
+            } catch (_) {
+                parsed = config;
+            }
         } else {
             parsed = config || {};
         }
@@ -171,9 +193,14 @@ builder.defineMetaHandler(async ({ type, id }) => {
 builder.defineStreamHandler(async ({ type, id, config }) => {
     if (!id.startsWith("av:")) return { streams: [] };
 
+    console.log("[Stream] Request for:", id.substring(0, 20));
     const userConfig = parseConfig(config);
-    if (!userConfig.rdKey && !userConfig.tbKey) {
-        // No debrid configured — return raw magnet streams (play directly via WebTorrent)
+    const hasTB = !!userConfig.tbKey;
+    const hasRD = !!userConfig.rdKey;
+    console.log("[Stream] Config — hasTorbox:", hasTB, "hasRD:", hasRD);
+
+    if (!hasRD && !hasTB) {
+        console.log("[Stream] No debrid keys — returning raw magnet streams");
         return await buildRawStreams(id);
     }
 
