@@ -88,7 +88,6 @@ const manifest = {
     ],
     behaviorHints: {
         configurable: true,
-        configurationRequired: true,
         adult: true,
     },
 };
@@ -110,11 +109,14 @@ function parseSizeToBytes(sizeStr) {
     return val;
 }
 
-function selectBestVideoFile(files, requestedEp) {
+function selectBestVideoFile(files) {
     if (!files || files.length === 0) return null;
-    const videoFiles = files.filter(f => /\.(mkv|mp4|avi|wmv|flv|m4v|ts|mov|webm)$/i.test(f.name || f.path || ""));
+    const MIN_SIZE = 50 * 1024 * 1024; // 50 MB — skip preview/spam files
+    const videoFiles = files
+        .filter(f => /\.(mkv|mp4|avi|wmv|flv|m4v|ts|mov|webm)$/i.test(f.name || f.path || ""))
+        .filter(f => (f.size || 0) > MIN_SIZE); // ignore tiny preview files
     if (videoFiles.length === 0) return null;
-    // For AV (single movie), just pick the largest video file
+    // Pick the largest — that's always the full AV content
     return videoFiles.sort((a, b) => (b.size || 0) - (a.size || 0))[0];
 }
 
@@ -200,8 +202,15 @@ builder.defineStreamHandler(async ({ type, id, config }) => {
     console.log("[Stream] Config — hasTorbox:", hasTB, "hasRD:", hasRD);
 
     if (!hasRD && !hasTB) {
-        console.log("[Stream] No debrid keys — returning raw magnet streams");
-        return await buildRawStreams(id);
+        console.log("[Stream] No debrid keys — returning setup instructions");
+        return {
+            streams: [{
+                name: "⚙️ Setup Required",
+                description: "Visit your jaYomi configure page, enter your Torbox or RD key, then REINSTALL the generated manifest URL in Stremio.\n\nhttps://jayomi.onrender.com",
+                externalUrl: "https://jayomi.onrender.com",
+            }],
+            cacheMaxAge: 60,
+        };
     }
 
     return await buildDebridStreams(id, userConfig);
