@@ -121,10 +121,15 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
     const metaTimeout = new Promise(r => setTimeout(() => r(null), 4000));
     const extMeta = await Promise.race([fetchMetadata(query), metaTimeout]);
 
+    let background = poster;
+    let releaseInfo = undefined;
+
     if (extMeta) {
         if (extMeta.title) displayName = `${extMeta.id || label} — ${extMeta.title}`.substring(0, 80);
         if (extMeta.poster) poster = extMeta.poster;
+        if (extMeta.background) background = extMeta.background;
         if (extMeta.description) description = `${description}\n\n---\n\n${extMeta.description}`;
+        if (extMeta.year) releaseInfo = extMeta.year;
     }
 
     return {
@@ -133,8 +138,10 @@ builder.defineCatalogHandler(async ({ type, id, extra }) => {
             type: "movie",
             name: displayName,
             poster,
+            background,
             posterShape: "poster",
             description,
+            releaseInfo,
             genres: ["Adult"],
         }],
         cacheMaxAge: 3600,
@@ -165,10 +172,19 @@ builder.defineMetaHandler(async ({ type, id }) => {
     let poster = generatePoster(label);
     let description = `${torrents.length} torrent(s) found on sukebei.nyaa.si.\nSearch: ${query}\n\n${firstTitle}`;
 
+    let background = poster;
+    let cast = [];
+    let director = [];
+    let releaseInfo = undefined;
+
     if (extMeta) {
         if (extMeta.title) displayName = `${extMeta.id || label} — ${extMeta.title}`.substring(0, 80);
         if (extMeta.poster) poster = extMeta.poster;
+        if (extMeta.background) background = extMeta.background;
         if (extMeta.description) description = `${description}\n\n---\n\n${extMeta.description}`;
+        if (extMeta.cast) cast = extMeta.cast;
+        if (extMeta.director) director = extMeta.director;
+        if (extMeta.year) releaseInfo = extMeta.year;
     }
 
     return {
@@ -177,9 +193,13 @@ builder.defineMetaHandler(async ({ type, id }) => {
             type: "movie",
             name: displayName,
             poster,
+            background,
             posterShape: "poster",
             description,
             genres: ["Adult", "AV"],
+            cast,
+            director,
+            releaseInfo,
         },
         cacheMaxAge: 3600,
     };
