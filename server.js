@@ -216,10 +216,15 @@ async function resolveRealDebrid(apiKey, hash, res, req) {
         await axios.post(`https://api.real-debrid.com/rest/1.0/torrents/selectFiles/${torrent.id}`,
             "files=" + (selectedIds.length ? selectedIds.join(",") : "all"),
             { headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/x-www-form-urlencoded" }, timeout: 10000 });
-        await new Promise(r => setTimeout(r, 1500));
-        info = await axios.get(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrent.id}`, {
-            headers: { Authorization: "Bearer " + apiKey }, timeout: 10000,
-        });
+        
+        // Wait for RD to process the file selection (sometimes takes 1-3 seconds for instant availability)
+        for (let i = 0; i < 4; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            info = await axios.get(`https://api.real-debrid.com/rest/1.0/torrents/info/${torrent.id}`, {
+                headers: { Authorization: "Bearer " + apiKey }, timeout: 10000,
+            });
+            if (info.data.status === "downloaded") break;
+        }
     }
 
     if (info.data.status !== "downloaded") {
@@ -270,10 +275,21 @@ async function resolveTorbox(apiKey, hash, res, req) {
                 form,
                 { headers: { ...form.getHeaders(), Authorization: "Bearer " + apiKey }, timeout: 15000 });
             logger.info(TAG, "[TB] Add result:", JSON.stringify(addRes.data).substring(0, 150));
+
+            if (addRes.data?.data?.torrent_id) {
+                // If added successfully, immediately fetch the torrent object from the list to continue streaming
+                const recheck = await axios.get("https://api.torbox.app/v1/api/torrents/mylist?bypass_cache=true", {
+                    headers: { Authorization: "Bearer " + apiKey }, timeout: 15000,
+                });
+                torrent = recheck.data?.data?.find(t => String(t.id) === String(addRes.data.data.torrent_id));
+            }
         } catch (addErr) {
             logger.error(TAG, "[TB] Failed to add magnet:", addErr.response?.data || addErr.message);
         }
-        return serveLoadingVideo(req, res);
+
+        if (!torrent) {
+            return serveLoadingVideo(req, res);
+        }
     }
 
     logger.info(TAG, "[TB] Found torrent. State:", torrent.download_state);
